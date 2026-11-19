@@ -38,7 +38,8 @@ async def handle_client(reader: asyncio.StreamReader, writer: asyncio.StreamWrit
     peer = writer.get_extra_info("peername")
     print(f"[i] Connection from {peer}")
     try:
-        await auth(reader, writer)
+        writer.write(struct.pack("!BB", SOCKS_VERSION, NO_AUTH))
+        await writer.drain()
         print("[S] Authentication method accepted")
         treader, twriter, taddr = await check_request(reader, writer)
     except Exception as e:
@@ -52,24 +53,6 @@ async def handle_client(reader: asyncio.StreamReader, writer: asyncio.StreamWrit
         relay(treader, writer),
     )
     print(f"[x] Connection to {peer} closed")
-
-
-async def auth(reader, writer):
-  """
-  Inspection of the first messages issued by the client, where the authentication method is agreed
-  """
-  ver, nmethods = struct.unpack("!BB", await reader.readexactly(2))
-  if ver != SOCKS_VERSION:
-      raise ValueError(f"unsupported SOCKS version {ver}")
-  methods = await reader.readexactly(nmethods)
-
-  if NO_AUTH not in methods:
-      writer.write(struct.pack("!BB", SOCKS_VERSION, NO_ACCEPTABLE))
-      await writer.drain()
-      raise ValueError("client offered no acceptable auth method")
-
-  writer.write(struct.pack("!BB", SOCKS_VERSION, NO_AUTH))
-  await writer.drain()
 
 
 async def reply(writer, rep, atyp=ATYP_IPV4):
@@ -89,8 +72,6 @@ async def check_request(reader, writer):
     """
     ver, cmd = struct.unpack("!BB", await reader.readexactly(2))
     await reader.readexactly(2)
-    if ver != SOCKS_VERSION:
-        raise ValueError("bad version in request")
 
     raw = await reader.readexactly(4)
     taddr = socket.inet_ntop(socket.AF_INET, raw)
