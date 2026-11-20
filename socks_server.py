@@ -5,14 +5,9 @@ import struct
 
 SOCKS_VERSION = 5
 NO_AUTH = 0x00
-NO_ACCEPTABLE = 0xFF
 ATYP_IPV4 = 0x01
-CMD_CONNECT = 0x01
 REP_SUCCESS = 0x00
-REP_GENERAL_FAILURE = 0x01
 REP_CONN_REFUSED = 0x05
-REP_CMD_NOT_SUPPORTED = 0x07
-REP_ATYP_NOT_SUPPORTED = 0x08
 
 async def relay(src: asyncio.StreamReader, dst: asyncio.StreamWriter):
     """
@@ -40,7 +35,6 @@ async def handle_client(reader: asyncio.StreamReader, writer: asyncio.StreamWrit
     try:
         writer.write(struct.pack("!BB", SOCKS_VERSION, NO_AUTH))
         await writer.drain()
-        print("[S] Authentication method accepted")
         treader, twriter, taddr = await check_request(reader, writer)
     except Exception as e:
         print(f"[E] {peer}: {e}")
@@ -70,9 +64,7 @@ async def check_request(reader, writer):
     """
     Attempts to establish a connection with the foreign server desired by the client.
     """
-    ver, cmd = struct.unpack("!BB", await reader.readexactly(2))
-    await reader.readexactly(2)
-
+    await reader.readexactly(4) # ver,cmd,rsv,atyp
     raw = await reader.readexactly(4)
     taddr = socket.inet_ntop(socket.AF_INET, raw)
     tport = struct.unpack("!H", await reader.readexactly(2))[0]
@@ -81,8 +73,7 @@ async def check_request(reader, writer):
         treader, twriter = await asyncio.open_connection(taddr, tport)
     except OSError as e:
         await reply(writer, REP_CONN_REFUSED)
-        raise ValueError(f"connect to {taddr}:{tport} failed: {e}")
-
+        raise ValueError(f"connection to {taddr}:{tport} failed: {e}")
     await reply(writer, REP_SUCCESS)
 
     return treader, twriter, f"{taddr}:{tport}"
