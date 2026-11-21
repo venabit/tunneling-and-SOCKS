@@ -33,6 +33,7 @@ async def handle_client(reader: asyncio.StreamReader, writer: asyncio.StreamWrit
     peer = writer.get_extra_info("peername")
     print(f"[i] Connection from {peer}")
     try:
+        await reader.readexactly(3)
         writer.write(struct.pack("!BB", SOCKS_VERSION, NO_AUTH))
         await writer.drain()
         treader, twriter, taddr = await check_request(reader, writer)
@@ -41,7 +42,7 @@ async def handle_client(reader: asyncio.StreamReader, writer: asyncio.StreamWrit
         writer.close()
         return
 
-    print(f"[i] Connection {peer} -> {taddr} stablished")
+    print(f"[i] Connection {peer} -> {taddr} successful")
     await asyncio.gather(
         relay(reader, twriter),
         relay(treader, writer),
