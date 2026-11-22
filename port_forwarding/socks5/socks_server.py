@@ -33,7 +33,7 @@ async def handle_client(reader: asyncio.StreamReader, writer: asyncio.StreamWrit
     peer = writer.get_extra_info("peername")
     print(f"[i] Connection from {peer}")
     try:
-        await reader.readexactly(3)
+        await reader.readexactly(3) # var, nmethods, method
         writer.write(struct.pack("!BB", SOCKS_VERSION, NO_AUTH))
         await writer.drain()
         treader, twriter, taddr = await check_request(reader, writer)
@@ -53,6 +53,13 @@ async def handle_client(reader: asyncio.StreamReader, writer: asyncio.StreamWrit
 async def reply(writer, rep, atyp=ATYP_IPV4):
     """
     Send the corresponding response code to the client
+    
+      +----+-----+-------+------+----------+----------+
+      |VER | REP |  RSV  | ATYP | BND.ADDR | BND.PORT |
+      +----+-----+-------+------+----------+----------+
+      | 1  |  1  | X'00' |  1   | Variable |    2     |  size
+      +----+-----+-------+------+----------+----------+
+      
     """
     addr, port = writer.get_extra_info("sockname")[:2]
     addr_bytes = socket.inet_pton(socket.AF_INET, addr)
@@ -64,6 +71,13 @@ async def reply(writer, rep, atyp=ATYP_IPV4):
 async def check_request(reader, writer):
     """
     Attempts to establish a connection with the foreign server desired by the client.
+    
+      +----+-----+-------+------+----------+----------+
+      |VER | CMD |  RSV  | ATYP | DST.ADDR | DST.PORT |
+      +----+-----+-------+------+----------+----------+
+      | 1  |  1  | X'00' |  1   | Variable |    2     |  size
+      +----+-----+-------+------+----------+----------+
+      
     """
     await reader.readexactly(4) # ver,cmd,rsv,atyp
     raw = await reader.readexactly(4)
