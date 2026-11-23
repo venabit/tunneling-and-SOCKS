@@ -10,6 +10,8 @@ import (
 )
 
 
+// main listens for incoming tunnel connections and dispatches each one to
+// handleTunnelSession in its own goroutine.
 func main() {
 	bind := flag.String("bind", "127.0.0.1", "bind address")
 	port := flag.Int("port", 8080, "server port")
@@ -33,14 +35,17 @@ func main() {
 }
 
 
+// handleTunnelSession wraps rawConn in a yamux server session, then starts a
+// local SOCKS5 entry point (127.0.0.1:1080) and relays every connection
+// accepted there through a new stream on that session.
 func handleTunnelSession(rawConn net.Conn) {
-	session, err := yamux.Server(rawConn, nil)
+	tunnel, err := yamux.Server(rawConn, nil)
 	if err != nil {
 		log.Printf("[E] Error starting the tunnel: %v", err)
 		rawConn.Close()
 		return
 	}
-	defer session.Close()
+	defer tunnel.Close()
 
 	socksEntry, err := net.Listen("tcp", "127.0.0.1:1080")
 	if err != nil {
@@ -50,25 +55,27 @@ func handleTunnelSession(rawConn net.Conn) {
 	defer socksEntry.Close()
 
 	for {
-		conn, err := socksEntry.Accept()
+		client, err := socksEntry.Accept()
 		if err != nil {
 			log.Println("[E] Accept error:", err)
 			return
 		}
-		go relay(conn, session)
+		go relay(client, tunnel)
 	}
 }
 
-func relay(conn net.Conn, session *yamux.Session) {
-	defer conn.Close()
+// relay opens a new stream in the tunnel and copies data bidirectionally
+// between client stream and that stream until either side closes.
+func relay(client net.Conn, tunnel *yamux.Session) {
+	defer client.Close()
 
-	stream, err := session.Open()
+	stream, err := tunnel.Open()
 	if err != nil {
 		log.Printf("[E] Error opening stream: %v", err)
 		return
 	}
 	defer stream.Close()
 
-	go io.Copy(stream, conn)
-	io.Copy(conn, stream)
+	go io.Copy(stream, client)
+	io.Copy(client, stream)
 }

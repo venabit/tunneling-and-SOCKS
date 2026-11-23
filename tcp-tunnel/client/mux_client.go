@@ -10,6 +10,9 @@ import (
 )
 
 
+// main connects to the tunnel server over TCP, opens a yamux client session
+// on that connection, and serves a SOCKS5 proxy on every stream the server
+// opens through the session.
 func main() {
     server := flag.String("server", "127.0.0.1", "server address")
     port := flag.Int("port", 8080, "server port")
