@@ -3,7 +3,7 @@ import asyncio
 import socket
 import struct
 
-SOCKS_VERSION = 5
+SOCKS_VERSION = 0x05
 NO_AUTH = 0x00
 ATYP_IPV4 = 0x01
 REP_SUCCESS = 0x00
@@ -26,26 +26,26 @@ async def relay(src: asyncio.StreamReader, dst: asyncio.StreamWriter):
         dst.close()
 
 
-async def handle_client(reader: asyncio.StreamReader, writer: asyncio.StreamWriter):
+async def handle_client(rclient: asyncio.StreamReader, wclient: asyncio.StreamWriter):
     """
     Handle each client Connection to the server.
     """
-    peer = writer.get_extra_info("peername")
+    peer = wclient.get_extra_info("peername")
     print(f"[i] Connection from {peer}")
     try:
-        await reader.readexactly(3) # var, nmethods, method
-        writer.write(struct.pack("!BB", SOCKS_VERSION, NO_AUTH))
-        await writer.drain()
-        treader, twriter, taddr = await check_request(reader, writer)
+        await rclient.readexactly(3) # var, nmethods, method
+        wclient.write(struct.pack("!BB", SOCKS_VERSION, NO_AUTH))
+        await wclient.drain()
+        rtarget, wtarget, taddr = await check_request(rclient, wclient)
     except Exception as e:
         print(f"[E] {peer}: {e}")
-        writer.close()
+        wclient.close()
         return
 
     print(f"[i] Connection {peer} -> {taddr} successful")
     await asyncio.gather(
-        relay(reader, twriter),
-        relay(treader, writer),
+        relay(rclient, wtarget),
+        relay(rtarget, wclient),
     )
     print(f"[x] Connection to {peer} closed")
 
